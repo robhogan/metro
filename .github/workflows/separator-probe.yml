@@ -1,0 +1,43 @@
+name: separator-probe
+
+# Throwaway instrument for react/metro#648 and #1286 — see
+# tools/separator-probe/README.md. Not intended to land on main.
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        runs-on: ['windows-latest', 'ubuntu-latest', 'macos-latest']
+        node-version: ['22.13.0', 'latest']
+    runs-on: ${{ matrix.runs-on }}
+    name: "Probe [${{ matrix.runs-on }}, Node.js ${{ matrix.node-version }}]"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          check-latest: true
+      # A local install, with scripts enabled: esbuild needs its postinstall to
+      # place a platform binary, which Metro's own `--ignore-scripts` install
+      # would deny it. Nothing here touches Metro's dependencies.
+      - name: Install probe dependencies
+        run: npm install --no-audit --no-fund
+        working-directory: tools/separator-probe
+      - name: Run probe
+        run: node probe.mjs
+        working-directory: tools/separator-probe
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: probe-${{ matrix.runs-on }}-node${{ matrix.node-version }}
+          path: tools/separator-probe/result-*.json
+          if-no-files-found: warn

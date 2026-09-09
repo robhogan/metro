@@ -1,0 +1,15 @@
+{
+  "name": "separator-probe",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Throwaway instrument for react/metro#648 and #1286 — not part of Metro",
+  "scripts": {
+    "probe": "node probe.mjs"
+  },
+  "dependencies": {
+    "enhanced-resolve": "^5.17.1",
+    "vite": "^5.4.11",
+    "webpack": "^5.97.1"
+  }
+}
