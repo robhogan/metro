@@ -23,7 +23,7 @@ This probe answers it by measurement rather than argument, on the platform where
 
 ## What it does
 
-For each specifier form, it asks five resolvers to resolve the same target file and records whether they did:
+For each specifier form, it asks six resolvers to resolve the same target file and records whether they did:
 
 | resolver | how |
 |---|---|
@@ -31,12 +31,15 @@ For each specifier form, it asks five resolvers to resolve the same target file 
 | `node (esm import)` | child process running `import <specifier>` |
 | `webpack (enhanced-resolve)` | webpack's resolver, called directly |
 | `webpack (full build)` | a real webpack build, reading resolution errors off the stats |
-| `vite (build)` | a real `vite build`, catching the rollup resolution error |
+| `vite (esm build)` | a real `vite build` of an `import`, catching the rollup resolution error |
+| `vite (cjs build)` | the same for a `require()`, with the commonjs plugin opted in to the fixture |
 
 Specifier forms cover both branches Metro reaches by the same route — `isRelativeImport(specifier) || path.isAbsolute(specifier)`:
 
 - **relative** — posix (`./sub/mod`), backslash (`.\sub\mod`), and both mixtures
 - **absolute** — native, posix-slash, backslash, and a `file://` URL
+
+A Vite build that cannot resolve a specifier does not always fail: rollup's commonjs plugin emits `UNRESOLVED_IMPORT` and treats the module as external, so the build succeeds having resolved nothing. Both Vite runners therefore treat an unresolved-import warning as a failure. Scoring on exit status alone reported every backslash case as a success, which is wrong in precisely the cases under test.
 
 The two pure-posix relative cases are **controls**. If a resolver fails one, it is misconfigured and its other answers in that run cannot be read, so the probe exits non-zero and says so. Both earlier drafts of this script were caught that way.
 

@@ -173,8 +173,18 @@ async function webpackBuild(root, c) {
   });
 }
 
-async function viteBuild(root, c) {
+/**
+ * A Vite build, counting an externalised specifier as unresolved.
+ *
+ * Rollup's commonjs plugin does not fail on a specifier it cannot resolve — it
+ * emits `UNRESOLVED_IMPORT` and treats the module as an external dependency, so
+ * the build succeeds having resolved nothing. Taking exit status alone as the
+ * answer reports those as successes, which is wrong in exactly the cases under
+ * test.
+ */
+async function viteRun(root, entry, extraBuild) {
   const {build} = await import('vite');
+  const unresolved = [];
   try {
     await build({
       root,
@@ -183,21 +193,49 @@ async function viteBuild(root, c) {
       build: {
         write: false,
         target: 'esnext',
-        rollupOptions: {input: path.join(root, `entry-${c.id}.mjs`)},
+        ...extraBuild,
+        rollupOptions: {
+          input: entry,
+          onwarn(warning) {
+            if (
+              warning.code === 'UNRESOLVED_IMPORT' ||
+              /could not be resolved/.test(warning.message ?? '')
+            ) {
+              unresolved.push(warning.message);
+            }
+          },
+        },
       },
     });
-    return {status: RESOLVED, detail: ''};
   } catch (e) {
     return {status: FAILED, detail: brief(e.message)};
   }
+  return unresolved.length > 0
+    ? {status: FAILED, detail: 'externalised, not resolved: ' + brief(unresolved[0])}
+    : {status: RESOLVED, detail: ''};
 }
+
+const viteBuild = (root, c) =>
+  viteRun(root, path.join(root, `entry-${c.id}.mjs`), {});
+
+/**
+ * Vite again, but resolving a `require()` rather than an `import`. Its
+ * commonjs plugin defaults to `node_modules` only, so the fixture has to be
+ * opted in explicitly or the entry is never transformed and the question goes
+ * unasked.
+ */
+const viteBuildCjs = (root, c) =>
+  viteRun(root, path.join(root, `entry-${c.id}.cjs`), {
+    commonjsOptions: {include: [/.*/], transformMixedEsModules: true},
+  });
 
 const RESOLVERS = [
   {name: 'node (cjs require)', run: nodeCjs, target: CJS_TARGET},
   {name: 'node (esm import)', run: nodeEsm, target: ESM_TARGET},
   {name: 'webpack (enhanced-resolve)', run: enhancedResolve, target: CJS_TARGET},
   {name: 'webpack (full build)', run: webpackBuild, target: CJS_TARGET},
-  {name: 'vite (build)', run: viteBuild, target: ESM_TARGET},
+  {name: 'vite (esm build)', run: viteBuild, target: ESM_TARGET},
+  {name: 'vite (cjs build)', run: viteBuildCjs, target: CJS_TARGET},
 ];
 
 async function main() {
